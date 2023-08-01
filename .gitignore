@@ -1,0 +1,5 @@
+.vscode
+/node_modules/
+/build
+/public/items/*.zip
+package-lock.json
