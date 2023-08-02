@@ -31,7 +31,7 @@ intra-SCO navigation.
 		</organization>
 	</organizations>
 		<resources>
-			<resource identifier="resource_1" type="webcontent" adlcp:scormtype="sco" href="public/index.html?scalingMode=scale-up-down">
+			<resource identifier="resource_1" type="webcontent" adlcp:scormtype="sco" href="public/index.html">
 		</resource>
 	</resources>
 </manifest>
