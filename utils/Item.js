@@ -136,6 +136,8 @@ class ItemManager{
             let ref = path.join(sourceDir, items[idx]);
             if(fs.lstatSync(ref).isDirectory())
                 continue;
+            if(path.extname(ref) != ".zip")
+                continue;
             let name = path.basename(ref,".zip");
             var zip = new AdmZip(ref);
             let item = new Item(zip, name);
