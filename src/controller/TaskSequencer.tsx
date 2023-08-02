@@ -21,7 +21,7 @@ export default class TaskSequencer {
 
   get currentTask() :TaskIdentification | null
   {
-    return typeof this.currentTaskIndex == "number" ? {... this.tasks[this.currentTaskIndex]} : null;
+    return typeof this.currentTaskIndex === "number" ? {... this.tasks[this.currentTaskIndex]} : null;
   }
 
   public initialize(assessmentConfiguration: AssessmentConfiguration, playerCatalog: PlayerCatalog) : void {
