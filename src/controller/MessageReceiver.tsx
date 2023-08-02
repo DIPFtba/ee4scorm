@@ -90,7 +90,7 @@ export default class MessageReceiver {
     //allow external parent frame to send getScoringResult requests
     try {
       let tmp = JSON.parse(data);
-      if(tmp?.eventType == "getScoringResult" && this.getScoringResultListener !== 'noListener'){
+      if(tmp?.eventType === "getScoringResult" && this.getScoringResultListener !== 'noListener'){
         this.getScoringResultListener(source, JSON.stringify(tmp));
         return;
       }
