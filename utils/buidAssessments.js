@@ -29,6 +29,7 @@ function getConfig(basepath){
 
 
 let basepath = path.join(__dirname, "..", "public", "items");
+console.log(basepath);
 const {conf, itmmgr} = getConfig(basepath);
 itmmgr.extractEssentials(path.join(__dirname, "..", "public", "items"));
 fs.writeFileSync(path.join(__dirname, "..", "public", "assessments", "config.json"), JSON.stringify(conf));
