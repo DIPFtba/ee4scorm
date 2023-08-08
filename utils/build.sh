@@ -23,6 +23,7 @@ build_test(){
 		cp -a ./ee/SCORM_wrapper/1_2/. ./${ZIPNAME}/
 		cp -a ./ee/build/. ./${ZIPNAME}/public/ee/
 		cd ./${ZIPNAME} && zip -r  "../${ZIPNAME}.zip" *
+		cd $GITHUB_WORKSPACE
 		
 		export i=$((i+1))
 		return 1
