@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />    
+    <meta
+      name="description"
+      content="File based execution environment"
+    />
+
+    <script
+  src="https://code.jquery.com/jquery-3.6.0.min.js"
+  integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+  crossorigin="anonymous"></script>
+
+    <script>
+
+          var tasks = [];
+          var currentPage = null;
+          var startTimeStamp = null;
+          var processedUnload = false;
+          var reachedEnd = false;
+          var response = new Map();
+          var responseIdx = [];
+          var stateInitialized = false;
+
+          var statePromiseResolve;
+
+          async function requestState(){
+            return new Promise((_resolve, _reject) => {
+              statePromiseResolve = _resolve;
+              document.querySelector("iframe").contentWindow.postMessage({ type: 'getTasksState', requestId: ScormProcessGetValue("cmi.core.lesson_location") });
+              window.setTimeout(() => {
+                _reject("timeout");
+              },500);
+            });
+          }         
+      
+          window.addEventListener("beforeunload", (ev) => 
+          {  
+              // todo: try to save snapshot
+              ev.preventDefault();
+              
+              doUnload();
+            //   return ev.returnValue = 'Should the task really be reloaded?';
+              return null;
+
+          });
+          
+          function storeTaskState(data, suspend){
+            console.log(data);
+            localStorage.setItem("taskState", JSONC.pack({state: data, location: ScormProcessGetValue("cmi.core.lesson_location")}));
+            if(suspend)
+              ScormProcessSetValue(`cmi.suspend_data`, JSONC.pack({state: data, location: ScormProcessGetValue("cmi.core.lesson_location")}));
+          }
+
+          function doUnload(pressedExit){
+        
+            //don't call this function twice
+            if (processedUnload == true){return;}
+            
+            processedUnload = true;
+            
+            //record the session time
+            var endTimeStamp = new Date();
+            var totalMilliseconds = (endTimeStamp.getTime() - startTimeStamp.getTime());
+            var scormTime = ConvertMilliSecondsToSCORMTime(totalMilliseconds, false);
+            
+            ScormProcessSetValue("cmi.core.session_time", scormTime);
+            
+            //if the user just closes the browser, we will default to saving 
+            //their progress data. If the user presses exit, he is prompted.
+            //If the user reached the end, the exit normal to submit results.
+            let data = localStorage.getItem("taskState");
+            if(!!data)
+              ScormProcessSetValue(`cmi.suspend_data`, data);
+
+            if(!pressedExit)
+                ScormProcessSetValue("cmi.core.exit", "suspend");
+            
+            ScormProcessFinish();
+         }
+
+        function doExit(){
+
+          //note use of short-circuit AND. If the user reached the end, don't prompt.
+          //just exit normally and submit the results.
+          if (reachedEnd == false && confirm("Would you like to save your progress to resume later?")){
+          // if (reachedEnd == false){
+              //set exit to suspend
+              requestState().then(d => {
+                storeTaskState(d["state"], true);
+                ScormProcessSetValue("cmi.core.exit", "suspend");
+              });               
+          }
+          else{
+              //set exit to normal
+              ScormProcessSetValue("cmi.core.exit", "");
+          }
+
+          //process the unload handler to close out the session.
+          //the presense of an adl.nav.request will cause the LMS to 
+          //take the content away from the user.
+          doUnload(true);
+
+        }
+
+        
+        function getLocationName(taskDefinition){
+          return `${taskDefinition.item}.${taskDefinition.task}`;
+        }
+        
+
+        function recordResults(hitMap, requestId){
+          // let location = ScormProcessGetValue("cmi.core.lesson_location");
+          let location = requestId ?? ScormProcessGetValue("cmi.core.lesson_location");
+
+          hitMap.forEach((value, key) => {
+            let id = location+"."+key;
+            // let id = key;
+            let idx = responseIdx.indexOf(id);
+            if(idx<0){
+              responseIdx.push(id);
+              idx = responseIdx.indexOf(id);
+            }
+            response.set(id, value);
+            ScormProcessSetValue(`cmi.interactions.${idx}.id`, id);
+            ScormProcessSetValue(`cmi.interactions.${idx}.student_response`, value);
+          });
+        }
+
+
+        function processScoring(results, requestId){
+
+            // let tmp = Object.keys(data["params"][1]["incidents"])[0];
+            // let identifier = tmp.substring(tmp.indexOf("/item")+1).replace("/",".").replace("task=","").replace("item=","");
+
+
+            /*  
+            *   for valid indentifier characters, check:
+            *   \vendor\qtism\qtism\qtism\common\utils\data\CharacterMap.php        
+            *   \vendor\qtism\qtism\qtism\runtime\pci\json\Unmarshaller.php
+            */
+
+            let classes = [];
+            let hits = [];
+            let _response = new Map();
+
+            for (let i of Object.keys(results)) {
+                if (i.indexOf("hit.") >= 0 && results[i] == true)
+                    hits.push(i.split(".")[1]);
+            }
+
+            for (let i of Object.keys(results)) {
+                if (i.indexOf("hitClass.") >= 0) {
+                    let hit = hits.indexOf(i.split(".")[1]);
+                    if (hit >= 0){
+                        let text = "";
+                        if(typeof results["hitText."+hits[hit]] == "string")
+                            text = results["hitText."+hits[hit]];
+                        classes.push({ "class": results[i], "hit": hits[hit], "text": text });
+
+                        _response.set(results[i], hits[hit]);
+                        if(text.length>0){
+                          _response.set(results[i] + ".hitText", text);
+                        }
+                    }
+                }
+            }
+
+            console.log(_response, classes, hits);
+            recordResults(_response, requestId ?? "");
+        }        
+
+
+
+        window.onload = function () {
+
+            fetch("./ee/assessments/config.json",{
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(response => {
+
+                if(response.tasks && Array.isArray(response.tasks)){
+
+                    tasks = response.tasks;
+
+                    /*** Scorm 2004 ****/
+                    // ScormProcessSetValue("cmi.progress_measure", 0);
+
+                    console.log(tasks);
+                }
+            });
+
+            //record the time that the learner started the SCO so that we can report the total time
+            startTimeStamp = new Date();
+            
+            //initialize communication with the LMS
+            ScormProcessInitialize();
+
+            //it's a best practice to set the lesson status to incomplete when
+            //first launching the course (if the course is not already completed)
+            var completionStatus = ScormProcessGetValue("cmi.core.lesson_status");
+            if (completionStatus == "not attempted"){
+                ScormProcessSetValue("cmi.core.lesson_status", "incomplete");
+            }
+        }
+
+
+        window.addEventListener('message', (event) => {
+            
+            if(!event.data)
+              return;
+
+            try {
+
+              let data = JSON.parse(event.data);
+              console.log(data);
+              switch (data.eventType) {
+                
+                case "itemsLoadedInPlayer":
+
+                    if(stateInitialized)
+                        break;
+
+                    let _state = ScormProcessGetValue("cmi.suspend_data");
+                    console.log(ScormProcessGetValue("cmi.core.lesson_location"));
+                    console.log(_state);
+
+                    let _itemDefinition = tasks[0];
+
+                    if(!!_state){
+
+                        try {
+                            let state = JSONC.unpack(_state);
+                            let _location = state["location"];
+                            let _request = {
+                                state: state["state"]
+                            };
+                            let _tmp = _location.split(".");
+                            if(_tmp.length==2){
+                                let _itm = tasks.find(v => v.item==_tmp[0] && v.task==_tmp[1]);
+                                if(!!_itm)
+                                    _itemDefinition = _itm;
+                            }
+                            _request["item"] = _itemDefinition;
+                            console.log(_request);
+                            stateInitialized = true;
+                            document.querySelector("iframe").contentWindow.postMessage({type: 'preload_state', request: _request}); 
+
+                        } catch (error) {
+                            console.error(error);
+                        }
+                    }
+
+                break;
+
+                case "progress_location":
+                    
+                    /*** progress (Scorm 2004) ****
+                      let index = tasks.findIndex(e => e.item == data.data.item && e.task == data.data.task);
+                      if(index>=0){
+                        let progress = (index+1) / (tasks.length);
+                        progress = Math.round((progress + Number.EPSILON) * 100) / 100;
+                        ScormProcessSetValue("cmi.progress_measure", progress);
+                        console.log(progress);
+                      }
+                    */
+                    
+                    ScormProcessSetValue("cmi.core.lesson_location", getLocationName(data.data));
+                  break;
+                
+                case "progress_endOfSequence":
+                  reachedEnd=true;
+                  /*** Scorm 2004 ****/
+                  // ScormProcessSetValue("cmi.completion_status", "completed");
+                  ScormProcessSetValue("cmi.core.lesson_status", "completed");
+                  doExit();
+                break;
+                
+                case "getScoringResultReturn":
+                  if(!data["result"] || !data["requestId"])
+                    break;
+
+                  else {                  
+                      processScoring(data["result"], data["requestId"]);
+                      requestState().then(d => {
+                        storeTaskState(d["state"]);
+                      });
+                  }
+                  break;
+              
+                case "getTasksStateReturn":
+                  if(data["state"] && !!data["requestId"] && !!statePromiseResolve){
+                    statePromiseResolve(data);
+                  }
+                  break;
+
+                default:
+                  break;
+              }
+
+            } catch (error) {
+              console.error(error);
+            }
+
+            if(!!parent && parent !== window){
+                parent.postMessage(event.data, "*");
+            }
+
+        });
+
+    </script>         
+  </head>
+  <body style="margin: 0;"  oncontextmenu="return false;"> 
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div class="itemwrapper" style="overflow: hidden; width: 100%; height: 100vh">
+        <iframe src="./ee/index.html" style="border:none;margin:0px;padding:0px;overflow:hidden;height: 100%; width: 100%;" id="cbaframe"></iframe>
+    </div>
+  </body>
+  <script src="./js/scormfunctions.js"></script>
+  <script src="./js/jsonc.min.js"></script>
+</html>

@@ -37,7 +37,7 @@ function findAPI(win)
       // Note: 7 is an arbitrary number, but should be more than sufficient
       if (findAPITries > 7)
       {
-         alert("Error finding API -- too deeply nested.");
+         console.error("Error finding API -- too deeply nested.");
          return null;
       }
 
@@ -66,8 +66,8 @@ function getAPI()
    // if the API has not been found
    if (theAPI == null)
    {
-      // Alert the user that the API Adapter could not be found
-      alert("Unable to find an API adapter");
+      // console.error the user that the API Adapter could not be found
+      console.error("Unable to find an API adapter");
    }
    return theAPI;
 }
@@ -101,7 +101,7 @@ function ScormProcessInitialize(){
     API = getAPI();
     
     if (API == null){
-        alert("ERROR - Could not establish a connection with the LMS.\n\nYour results may not be recorded.");
+        console.error("ERROR - Could not establish a connection with the LMS.\n\nYour results may not be recorded.");
         return;
     }
     
@@ -114,7 +114,7 @@ function ScormProcessInitialize(){
         
         var errorDescription = "Number: " + errorNumber + "\nDescription: " + errorString + "\nDiagnostic: " + diagnostic;
         
-        alert("Error - Could not initialize communication with the LMS.\n\nYour results may not be recorded.\n\n" + errorDescription);
+        console.error("Error - Could not initialize communication with the LMS.\n\nYour results may not be recorded.\n\n" + errorDescription);
         return;
     }
     
@@ -139,7 +139,7 @@ function ScormProcessFinish(){
         
         var errorDescription = "Number: " + errorNumber + "\nDescription: " + errorString + "\nDiagnostic: " + diagnostic;
         
-        alert("Error - Could not terminate communication with the LMS.\n\nYour results may not be recorded.\n\n" + errorDescription);
+        console.error("Error - Could not terminate communication with the LMS.\n\nYour results may not be recorded.\n\n" + errorDescription);
         return;
     }
 }
@@ -172,7 +172,7 @@ function ScormProcessGetValue(element){
             
             var errorDescription = "Number: " + errorNumber + "\nDescription: " + errorString + "\nDiagnostic: " + diagnostic;
             
-            alert("Error - Could not retrieve a value from the LMS.\n\n" + errorDescription);
+            console.error("Error - Could not retrieve a value from the LMS.\n\n" + errorDescription);
             return "";
         }
     }
@@ -195,7 +195,7 @@ function ScormProcessSetValue(element, value){
         
         var errorDescription = "Number: " + errorNumber + "\nDescription: " + errorString + "\nDiagnostic: " + diagnostic;
         
-        alert("Error - Could not store a value in the LMS.\n\nYour results may not be recorded.\n\n" + errorDescription);
+        console.error("Error - Could not store a value in the LMS.\n\nYour results may not be recorded.\n\n" + errorDescription);
         return;
     }
     

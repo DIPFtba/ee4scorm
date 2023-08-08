@@ -38,7 +38,7 @@ export function sendMessageToTaskPlayer(targetWindow : MessageEventSource, paylo
     { eventType: 'setSwitchAvailability', request: 'goToTask', scope: string, item?: string, task: string, value: boolean} |
     { eventType: 'setScalingConfiguration', scalingMode: string, alignmentHorizontal: string, alignmentVertical: string} | 
     // task state control
-    { eventType: 'getTasksState'} |
+    { eventType: 'getTasksState', requestId?: string} |
     { eventType: 'clearTasksState' } |
     { eventType: 'preloadTasksState', state: string } |
     // scoring control

@@ -22,7 +22,14 @@ export default class MessageReceiver {
   private taskSwitchRequestListener : ((source: MessageEventSource, request: RequestType, requestDetails?: TaskRequestDetails) => void) | 'noListener' = 'noListener'; 
 
   //pass external scoringResult requests to the runtime
-  private getScoringResultListener : ((source: MessageEventSource, result: string) => void) | 'noListener' = 'noListener'; 
+  private getScoringResultListener : ((source: MessageEventSource, requestDetails: any) => void) | 'noListener' = 'noListener'; 
+  
+  
+  private getTaskStateListener : ((source: MessageEventSource, requestDetails: any) => void) | 'noListener' = 'noListener'; 
+
+  private shinyTaskSwitchRequestListener : ((source: MessageEventSource, requestDetails: ShinySwitchRequest) => void) | 'noListener' = 'noListener'; 
+  private shinyPreloadStateListener : ((source: MessageEventSource, requestDetails: any) => void) | 'noListener' = 'noListener'; 
+  private shinyClearStateListener : ((source: MessageEventSource) => void) | 'noListener' = 'noListener';   
 
   /**
    * Start to receive messages.
@@ -79,6 +86,18 @@ export default class MessageReceiver {
     this.getScoringResultListener = listener;
   }
 
+  public setShinyTaskSwitchRequestListener(listener: (source: MessageEventSource, requestDetails: ShinySwitchRequest) => void) : void {
+    this.shinyTaskSwitchRequestListener = listener;
+  }
+
+  public setShinyPreloadStateListener(listener: (source: MessageEventSource, requestDetails: any) => void) : void {
+    this.shinyPreloadStateListener = listener;
+  }
+
+  public setGetTaskStateListener(listener: (source: MessageEventSource, requestDetails: any) => void) : void {
+    this.getTaskStateListener = listener;
+  }
+
   private processMessageEvent(event : MessageEvent<any>) : void {
     const { origin, data, source } = event;
 
@@ -87,23 +106,34 @@ export default class MessageReceiver {
       return;
     }
 
-    //allow external parent frame to send getScoringResult requests
-    try {
-      let tmp = JSON.parse(data);
-      if(tmp?.eventType === "getScoringResult" && this.getScoringResultListener !== 'noListener'){
-        this.getScoringResultListener(source, JSON.stringify(tmp));
-        return;
-      }
-    } catch (e) {
-      console.info(`Ignoring message with non-JSON data: ${data}`);
-      return;      
-    }
-
-
     if (origin !== window.origin) {
       console.warn(`Ignoring message from wrong origin. Message origin is ${origin}. Accepted origin is ${window.origin}.`);
       return;
     }
+
+    //assume it's a PM from shiny (or embedding application)
+    if(source === window.parent && typeof data === "object"){
+      if(!data.type)
+        return;
+
+      if(data.type === "navigate_to" && this.shinyTaskSwitchRequestListener !== "noListener"){
+        this.shinyTaskSwitchRequestListener(source, data.request as ShinySwitchRequest);
+      }
+
+      else if(data.type === "preload_state" && this.shinyPreloadStateListener !== "noListener"){
+        this.shinyPreloadStateListener(source, data.request);
+      }
+
+      else if(data.type === "getScoringResult" && this.getScoringResultListener !== "noListener"){
+        this.getScoringResultListener(source, JSON.stringify(data));
+      }
+
+      else if(data.type === "getTasksState" && this.getTaskStateListener !== "noListener"){
+        this.getTaskStateListener(source, JSON.stringify(data));
+      }
+
+      return;
+    }    
 
     let dataObject;
     try {
@@ -192,4 +222,12 @@ export interface GetTaskReturn {
   item: string, 
   task?: string, 
   scope: string
+}
+
+export interface ShinySwitchRequest {
+  item: string, 
+  runtime?: string, 
+  task: string,
+  scope?: string,
+  clearState?: boolean
 }

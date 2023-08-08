@@ -1,5 +1,5 @@
 import { v4 } from 'uuid'; 
-import MessageReceiver, { TaskRequestDetails, RequestType } from "./MessageReceiver";
+import MessageReceiver, { TaskRequestDetails, RequestType, ShinySwitchRequest } from "./MessageReceiver";
 import { sendMessageToTaskPlayer } from "./MessageSender";
 import { 
   ControllerConfiguration, 
@@ -107,17 +107,49 @@ export function configureMessageReceiver(
       case 'taskSwitch':
         sendMessageToTaskPlayer(sendingWindow, { eventType: 'getScoringResult', requestId: `${currentTask?.item}.${currentTask?.task}`});
         processTaskSwitchRequest(decision.playerId, decision.nextTask, sendingPlayerId, sendingWindow, itemCatalog, playerCatalog);        
-        window.postMessage(
-          JSON.stringify({eventType: "progress_position", data: {...decision.nextTask}}),
-          "*"
-        );        
         return;
       default: 
         const _exhaustiveCheck : never = decision;
         return _exhaustiveCheck;
     }
 
-  })
+  });
+
+  messageReceiver.setShinyTaskSwitchRequestListener((sendingWindow: MessageEventSource, requestDetails: ShinySwitchRequest) => {
+    requestDetails.scope = requestDetails?.scope ? requestDetails.scope : "Default";
+    processShinyTaskSwitchRequest({item: requestDetails.item, task: requestDetails.task, scope: requestDetails.scope} as TaskIdentification, itemCatalog, playerCatalog, requestDetails?.clearState);
+  });
+
+
+  messageReceiver.setShinyPreloadStateListener((sendingWindow: MessageEventSource, requestDetails: any) => {
+
+    const nextTask = !!requestDetails?.item ? requestDetails.item as TaskIdentification : taskSequencer.firstTask()?.firstTask;
+    if(!nextTask)
+      return;
+    
+    const targetItemVersion = itemCatalog.getVersion(nextTask.item);
+    if (targetItemVersion === undefined) {
+      console.warn(`Received task switch request to unknown item ${nextTask.item}. We ignored the request.`);
+      return;
+    }
+  
+    // const compatiblePlayer = getCompatiblePlayer(advisedPlayerId, targetItemVersion, {id: sendingPlayerId, frameWindow: sendingWindow}, playerCatalog);
+    const compatiblePlayer = playerCatalog.findCompatiblePlayer(targetItemVersion);
+    if (compatiblePlayer === undefined) {
+      console.warn(`Received task switch request to item ${nextTask.item} with version ${targetItemVersion} and could not find a compatible task player. We ignored the request.`);
+      return;
+    }
+
+    playerCatalog.doToAll((targetWindow: MessageEventSource) =>  stopTask(targetWindow));
+    // playerCatalog.doToAll((targetWindow: MessageEventSource) =>  sendMessageToTaskPlayer(targetWindow, {eventType: 'preloadTasksState', state: requestDetails?.state}));
+    // stopTask(compatiblePlayer.frameWindow);
+    sendMessageToTaskPlayer(compatiblePlayer.frameWindow, {eventType: 'preloadTasksState', state: requestDetails?.state});
+
+    playerCatalog.show(compatiblePlayer.id);
+    startTask(nextTask, compatiblePlayer.frameWindow);
+
+  });
+
 
   // What to do once login is finished: Download configuration, set up everything, and start first task.
   messageReceiver.setLoginDialogClosedListener((sendingWindow, nickname) => {
@@ -167,13 +199,14 @@ export function configureMessageReceiver(
       });
   });
 
-  messageReceiver.setGetScoringResultListener((sendingWindow, data) => {
-    // console.log(data);
-    if(!(sendingWindow === window)){
-      playerCatalog.doToAll((frame) => {
-        getScoringResult(frame);
-      })
+  messageReceiver.setGetTaskStateListener((sendingWindow, data) => {
+    let version = itemCatalog.getVersion(taskSequencer.currentTask?.item ?? "");
+    if(!!version){
+      playerCatalog.doToAllCompatible(version, (targetWindow) => {
+        sendMessageToTaskPlayer(targetWindow, { eventType: 'getTasksState', requestId: `${taskSequencer.currentTask?.item}.${taskSequencer.currentTask?.task}`});
+      });
     }
+
   });
 
   messageReceiver.setTraceLogListener((sendingWindow, data) => {
@@ -250,12 +283,44 @@ function processTaskSwitchRequest(
   
   // getScoringResult(sendingWindow)
   stopTask(sendingWindow);
+  sendMessageToTaskPlayer(sendingWindow, {eventType: 'clearTasksState'});
   playerCatalog.show(compatiblePlayer.id);
   startTask(nextTask, compatiblePlayer.frameWindow);
   return;
-
 }
 
+
+function processShinyTaskSwitchRequest(
+  nextTask: TaskIdentification,  
+  itemCatalog: ItemCatalog, 
+  playerCatalog: PlayerCatalog,
+  clearState: boolean | undefined) : void 
+{
+  console.log(nextTask);
+  const targetItemVersion = itemCatalog.getVersion(nextTask.item);
+  if (targetItemVersion === undefined) {
+    console.warn(`Received task switch request to unknown item ${nextTask.item}. We ignored the request.`);
+    return;
+  }
+
+  // const compatiblePlayer = getCompatiblePlayer(advisedPlayerId, targetItemVersion, {id: sendingPlayerId, frameWindow: sendingWindow}, playerCatalog);
+  const compatiblePlayer = playerCatalog.findCompatiblePlayer(targetItemVersion);
+  if (compatiblePlayer === undefined) {
+    console.warn(`Received task switch request to item ${nextTask.item} with version ${targetItemVersion} and could not find a compatible task player. We ignored the request.`);
+    return;
+  }
+  
+  // stopTask(sendingWindow);
+  playerCatalog.doToAll(targetWindow => {
+    stopTask(targetWindow);
+  });
+  if(!!clearState){
+    playerCatalog.doToAll((targetWindow: MessageEventSource) =>  sendMessageToTaskPlayer(targetWindow, { eventType: 'clearTasksState'}));
+  }
+  playerCatalog.show(compatiblePlayer.id);
+  startTask(nextTask, compatiblePlayer.frameWindow);
+  return;
+}
 
 /**
  * Load all required items and start the first task as advised by the task sequencer.
@@ -429,6 +494,10 @@ function stopTask(targetWindow: MessageEventSource) : void {
  */
 function startTask(toStart: TaskIdentification, targetWindow: MessageEventSource) : void {
   sendMessageToTaskPlayer(targetWindow, {eventType: 'startTask', item: toStart.item, task: toStart.task, scope: toStart.scope});
+  window.postMessage(
+    JSON.stringify({eventType: "progress_location", data: {...toStart}}),
+    "*"
+  );  
 }
 
 /**
