@@ -19,20 +19,18 @@ build_test(){
 		
 		export ZIPNAME="SCORM12_${FOLDER}_$(date '+%d-%m-%Y-%H:%M')"
 		mkdir $ZIPNAME
-		#pushd ./ee4scorm/ee && npm run build && popd
 		cp -a ./ee/SCORM_wrapper/1_2/. ./${ZIPNAME}/
 		cp -a ./ee/build/. ./${ZIPNAME}/public/ee/
 		cd ./${ZIPNAME} && zip -r  "../${ZIPNAME}.zip" *
 		cd $GITHUB_WORKSPACE
 		
-		export i=$((i+1))
 		return 1
 }
 
 if [ $(find ./items/items/* -maxdepth 0 -type d -printf . | wc -c) -ge "1" ]; then
-	export i=0
 	for IPATH in $( ls -d items/items/*/ )
 	do
 		build_test
 	done
+	exit 0
 fi
