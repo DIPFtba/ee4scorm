@@ -66,9 +66,10 @@
             if(!!data)
               ScormProcessSetValue(`cmi.suspend_data`, data);
 
-            if(!pressedExit)
+            if(!pressedExit){
+                ScormProcessSetValue("cmi.success_status", "unknown");
                 ScormProcessSetValue("cmi.exit", "suspend");
-            
+            }
             ScormProcessTerminate();
          }
 
@@ -87,6 +88,7 @@
           }
           else{
               //set exit to normal
+              ScormProcessSetValue("cmi.success_status", "passed");
               ScormProcessSetValue("cmi.exit", "");
               ScormProcessSetValue("adl.nav.request", "exitAll");
           }
