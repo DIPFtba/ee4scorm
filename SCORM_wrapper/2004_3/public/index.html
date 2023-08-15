@@ -82,11 +82,13 @@
               requestState().then(d => {
                 storeTaskState(d["state"], true);
                 ScormProcessSetValue("cmi.exit", "suspend");
+                ScormProcessSetValue("adl.nav.request", "suspendAll");
               });               
           }
           else{
               //set exit to normal
               ScormProcessSetValue("cmi.exit", "");
+              ScormProcessSetValue("adl.nav.request", "exitAll");
           }
 
           //process the unload handler to close out the session.
@@ -176,15 +178,10 @@
             })
             .then(response => response.json())
             .then(response => {
-
                 if(response.tasks && Array.isArray(response.tasks)){
-
                     document.querySelector("iframe").setAttribute("src", "./ee/index.html");                  
-
                     tasks = response.tasks;
-
                     console.log(tasks);
-                    
                 }
             });
 
