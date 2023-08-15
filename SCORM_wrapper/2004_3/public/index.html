@@ -31,19 +31,18 @@
           async function requestState(){
             return new Promise((_resolve, _reject) => {
               statePromiseResolve = _resolve;
-              document.querySelector("iframe").contentWindow.postMessage({ type: 'getTasksState', requestId: ScormProcessGetValue("cmi.core.lesson_location") });
+              document.querySelector("iframe").contentWindow.postMessage({ type: 'getTasksState', requestId: ScormProcessGetValue("cmi.location") });
               window.setTimeout(() => {
                 _reject("timeout");
               },500);
             });
-          }         
-      
+          }
           
           function storeTaskState(data, suspend){
             console.log(data);
-            localStorage.setItem("taskState", JSONC.pack({state: data, location: ScormProcessGetValue("cmi.core.lesson_location")}));
+            localStorage.setItem("taskState", JSONC.pack({state: data, location: ScormProcessGetValue("cmi.location")}));
             if(suspend)
-              ScormProcessSetValue(`cmi.suspend_data`, JSONC.pack({state: data, location: ScormProcessGetValue("cmi.core.lesson_location")}));
+              ScormProcessSetValue(`cmi.suspend_data`, JSONC.pack({state: data, location: ScormProcessGetValue("cmi.location")}));
           }
 
           function doUnload(pressedExit){
@@ -56,9 +55,9 @@
             //record the session time
             var endTimeStamp = new Date();
             var totalMilliseconds = (endTimeStamp.getTime() - startTimeStamp.getTime());
-            var scormTime = ConvertMilliSecondsToSCORMTime(totalMilliseconds, false);
+            var scormTime = ConvertMilliSecondsIntoSCORM2004Time(totalMilliseconds, false);
             
-            ScormProcessSetValue("cmi.core.session_time", scormTime);
+            ScormProcessSetValue("cmi.session_time", scormTime);
             
             //if the user just closes the browser, we will default to saving 
             //their progress data. If the user presses exit, he is prompted.
@@ -68,9 +67,9 @@
               ScormProcessSetValue(`cmi.suspend_data`, data);
 
             if(!pressedExit)
-                ScormProcessSetValue("cmi.core.exit", "suspend");
+                ScormProcessSetValue("cmi.exit", "suspend");
             
-            ScormProcessFinish();
+            ScormProcessTerminate();
          }
 
         function doExit(){
@@ -82,12 +81,12 @@
               //set exit to suspend
               requestState().then(d => {
                 storeTaskState(d["state"], true);
-                ScormProcessSetValue("cmi.core.exit", "suspend");
+                ScormProcessSetValue("cmi.exit", "suspend");
               });               
           }
           else{
               //set exit to normal
-              ScormProcessSetValue("cmi.core.exit", "");
+              ScormProcessSetValue("cmi.exit", "");
           }
 
           //process the unload handler to close out the session.
@@ -104,8 +103,8 @@
         
 
         function recordResults(hitMap, requestId){
-          // let location = ScormProcessGetValue("cmi.core.lesson_location");
-          let location = requestId ?? ScormProcessGetValue("cmi.core.lesson_location");
+          // let location = ScormProcessGetValue("cmi.location");
+          let location = requestId ?? ScormProcessGetValue("cmi.location");
 
           hitMap.forEach((value, key) => {
             let id = location+"."+key;
@@ -117,7 +116,8 @@
             }
             response.set(id, value);
             ScormProcessSetValue(`cmi.interactions.${idx}.id`, id);
-            ScormProcessSetValue(`cmi.interactions.${idx}.student_response`, value);
+            ScormProcessSetValue(`cmi.interactions.${idx}.type`, "other");
+            ScormProcessSetValue(`cmi.interactions.${idx}.learner_response`, value);
           });
         }
 
@@ -183,9 +183,6 @@
 
                     tasks = response.tasks;
 
-                    /*** Scorm 2004 ****/
-                    // ScormProcessSetValue("cmi.progress_measure", 0);
-
                     console.log(tasks);
                     
                 }
@@ -208,11 +205,14 @@
             //initialize communication with the LMS
             ScormProcessInitialize();
 
-            //it's a best practice to set the lesson status to incomplete when
+            /*** Scorm 2004 ****/
+            ScormProcessSetValue("cmi.progress_measure", 0);
+
+            //it's a best practice to set the completion status to incomplete when
             //first launching the course (if the course is not already completed)
-            var completionStatus = ScormProcessGetValue("cmi.core.lesson_status");
-            if (completionStatus == "not attempted"){
-                ScormProcessSetValue("cmi.core.lesson_status", "incomplete");
+            var completionStatus = ScormProcessGetValue("cmi.completion_status", true);
+            if (completionStatus == "unknown"){              
+                ScormProcessSetValue("cmi.completion_status", "incomplete");
             }
         }
 
@@ -234,7 +234,7 @@
                         break;
 
                     let _state = ScormProcessGetValue("cmi.suspend_data");
-                    console.log(ScormProcessGetValue("cmi.core.lesson_location"));
+                    console.log(ScormProcessGetValue("cmi.location"));
                     console.log(_state);
 
                     let _itemDefinition = tasks[0];
@@ -267,24 +267,24 @@
 
                 case "progress_location":
                     
-                    /*** progress (Scorm 2004) ****
+                    /*** progress (Scorm 2004) *****/
                       let index = tasks.findIndex(e => e.item == data.data.item && e.task == data.data.task);
                       if(index>=0){
                         let progress = (index+1) / (tasks.length);
                         progress = Math.round((progress + Number.EPSILON) * 100) / 100;
                         ScormProcessSetValue("cmi.progress_measure", progress);
-                        console.log(progress);
+                        console.log("progess: " + progress);
                       }
-                    */
                     
-                    ScormProcessSetValue("cmi.core.lesson_location", getLocationName(data.data));
+                    
+                    ScormProcessSetValue("cmi.location", getLocationName(data.data));
                   break;
                 
                 case "progress_endOfSequence":
                   reachedEnd=true;
                   /*** Scorm 2004 ****/
                   // ScormProcessSetValue("cmi.completion_status", "completed");
-                  ScormProcessSetValue("cmi.core.lesson_status", "completed");
+                  ScormProcessSetValue("cmi.completion_status", "completed");
                   doExit();
                 break;
                 
