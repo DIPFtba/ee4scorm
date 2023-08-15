@@ -19,7 +19,7 @@ build_test(){
 		
 		for WRAPPER_PATH in $( ls -d ./ee/SCORM_wrapper/*/ )
 		do
-			export SCORMPATH=${WRAPPER_PATH##*/}
+			cd $WRAPPER_PATH && export SCORMPATH=${PWD##*/} && cd $GITHUB_WORKSPACE
 			export ZIPNAME="SCORM_${SCORMPATH}_${FOLDER}_$(date '+%d-%m-%Y-%H:%M')"
 			mkdir $ZIPNAME
 			cp -a ./ee/SCORM_wrapper/${SCORMPATH}/. ./${ZIPNAME}/
