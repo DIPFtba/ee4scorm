@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<tincan xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns="http://projecttincan.com/tincan.xsd">
+  <activities>
+    <activity id="http://xAPI_CBAItemBuilder" type="http://adlnet.gov/expapi/activities/course">
+      <name lang="en-US">ItemBuilder - xAPI Example</name>
+      <description lang="en-US">
+	  &lt;em&gt;Replace these instructions with your own course content.&lt;/em&gt;&lt;em&gt;&lt;br data-text=&#34;true&#34;&gt;&lt;/em&gt;&lt;strong&gt;Template instructions:&amp;nbsp;&lt;/strong&gt;This template was designed to give you a head start on creating training. It contains lessons you might want to cover in a &lt;em&gt;Phishing 101&lt;/em&gt; course. It includes relevant headings, images, and writing prompts to guide you and is largely populated with placeholder text. You can easily replace this content with your own text and media.&lt;br data-text=&#34;true&#34;&gt;Use this space to write an overview of your course for learners and instruct them to click the &amp;quot;&lt;em&gt;Start Course&lt;/em&gt;&amp;quot; button to begin.
+      </description>
+      <launch lang="en-US">public/index.html</launch>
+    </activity>
+  </activities>
+</tincan>

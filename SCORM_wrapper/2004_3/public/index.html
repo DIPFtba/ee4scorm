@@ -264,7 +264,7 @@
 
                 break;
 
-                case "progress_location":
+                  case "progress_location":
                     
                     /*** progress (Scorm 2004) *****/
                       let index = tasks.findIndex(e => e.item == data.data.item && e.task == data.data.task);
@@ -275,14 +275,11 @@
                         console.log("progess: " + progress);
                       }
                     
-                    
                     ScormProcessSetValue("cmi.location", getLocationName(data.data));
                   break;
                 
                 case "progress_endOfSequence":
                   reachedEnd=true;
-                  /*** Scorm 2004 ****/
-                  // ScormProcessSetValue("cmi.completion_status", "completed");
                   ScormProcessSetValue("cmi.completion_status", "completed");
                   doExit();
                 break;

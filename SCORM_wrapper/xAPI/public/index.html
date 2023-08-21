@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8" />
+
+    <title>ItemBuilder - xAPI Example</title>
+
+    <link type="text/css" rel="stylesheet" href="lib/icomoon.css" />
+    <script type="text/javascript" src="lib/lzwcompress.js"></script>
+
+    <!-- Resize Hack -->
+    <script type="text/javascript">
+      window.resizeTo(screen.width, screen.height);
+    </script>
+
+    <script type="text/javascript" src="../tc-config.js"></script>
+    <script type="text/javascript" src="lib/tincan.js"></script>
+    <script type="text/javascript" src="lib/lms.js"></script>
+
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <script id="__ENTRY__" type="application/json">
+        {}
+    </script>    
+
+    <script>
+      (function () {
+        function load(manifest) {
+          const p = [];
+
+          if (manifest[".css"] != null) {
+            for (var idx = 0; idx < manifest[".css"].length; idx++) {
+              p.push(
+                new Promise((resolve, reject) => {
+                  var link = document.createElement("link");
+                  link.onload = resolve;
+                  link.onerror = reject;
+                  link.rel = "stylesheet";
+                  link.href = "lib/" + manifest[".css"][idx];
+                  document.body.appendChild(link);
+                })
+              );
+            }
+          }
+
+          if (manifest[".js"] != null) {
+            for (var idx = 0; idx < manifest[".js"].length; idx++) {
+              p.push(
+                new Promise((resolve, reject) => {
+                  var script = document.createElement("script");
+                  script.onload = resolve;
+                  script.onerror = reject;
+                  script.src = "lib/" + manifest[".js"][idx];
+                  document.body.appendChild(script);
+                })
+              );
+            }
+          }
+
+          return Promise.all(p);
+        }
+
+        function __loadEntry() {
+          return load(JSON.parse(document.getElementById('__ENTRY__').textContent))
+        }
+
+        // function __loadRemoteEntry(name) {
+        //   const manifest = JSON.parse(document.getElementById('__REMOTE_ENTRIES__').textContent)
+        //   return load(manifest[name])
+        // }
+
+        // window.__loadEntry = __loadEntry;
+        // window.__loadRemoteEntry = __loadRemoteEntry;
+      })();
+    </script>
+  </head>
+  <body>
+    <script>
+      (function (root) {
+
+        var tasks = [];
+        var tasksState = null;
+        var currentItem = null;
+        var processedUnload = false;
+        var reachedEnd = false;
+        var response = new Map();
+        var responseIdx = [];
+        var stateInitialized = false;
+        var tracecount = 0;
+
+        var statePromiseResolve;
+
+        getTotalProgress = function(){
+            let progress = 0;
+            if(!currentItem.item || !currentItem.task)
+              return 0;
+
+            let index = tasks.findIndex(e => e.item == currentItem.item && e.task == currentItem.task);
+            if(index>=0){
+              progress = (index+1) / (tasks.length);
+              progress = Math.round((progress + Number.EPSILON) * 100)
+              console.log("progess: " + progress);
+            }
+            return progress;
+        }
+
+        window.onload = function () {
+
+            fetch("./ee/assessments/config.json",{
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(response => {
+                if(response.tasks && Array.isArray(response.tasks)){
+                    document.querySelector("iframe").setAttribute("src", "./ee/index.html");                  
+                    tasks = response.tasks;
+                    currentItem = tasks[0];
+                    console.log(tasks);
+                }
+            });
+        }
+
+        window.addEventListener("beforeunload", (ev) => {  
+                // todo: try to save snapshot
+                ev.preventDefault();
+                
+                if(!!tasksState)
+                  concatLMSData({ tasksState });             
+                
+                completeOut(false);
+                exit();
+                // return ev.returnValue = 'Should the task really be reloaded?';
+                return null;
+
+        });         
+
+        window.addEventListener('message', (event) => {
+            
+            if(!event.data)
+              return;
+
+            try {
+
+              let data = JSON.parse(event.data);
+              console.log(data);
+              switch (data.eventType) {
+                
+                case "itemsLoadedInPlayer":
+
+                    if(stateInitialized)
+                        break;
+
+                    LMSProxy.Initialize(() => {
+
+                        let _itemDefinition = tasks[0];
+                        let _state = getLMSData();
+                        stateInitialized = true;
+                        console.log(_state);
+
+                        if(!!_state?.tasksState){
+
+                            try {
+                                let state = _state?.tasksState;
+                                let location = _state?.location;
+                                let _request = { state };
+                                let _tmp = location.split(".");
+                                if(_tmp.length==2){
+                                    let _itm = tasks.find(v => v.item==_tmp[0] && v.task==_tmp[1]);
+                                    if(!!_itm)
+                                        _itemDefinition = _itm;
+                                }
+                                _request["item"] = _itemDefinition;
+                                console.log(_request);
+                                document.querySelector("iframe").contentWindow.postMessage({type: 'preload_state', request: _request}); 
+
+                            } catch (error) {
+                                console.error(error);
+                            }
+                        }
+                    });
+
+                break;
+
+                case "traceLogTransmission":
+                    if(!data.traceLogData)
+                      break;
+                    LMSProxy.IbSendTracelog({
+                      tracecount: tracecount++,
+                      tracelog: data.traceLogData
+                    })
+                break;
+
+                case "progress_location":
+
+                    if(!data.data.item || !data.data.task)
+                      break;
+
+                    currentItem = data.data;
+                    let progress = getTotalProgress();
+                    concatLMSData({ totalProgress: progress, location: getLocationName(currentItem) });
+                                        
+                    bookmark(getLocationName(currentItem));
+                break;
+                
+                case "progress_endOfSequence":
+                  reachedEnd=true;
+                  finish(100);
+                  exit();
+                  // concatLMSData({ totalProgress: 100 });
+                  // completeOut();
+                break;
+                
+                case "getScoringResultReturn":
+                  if(!data["result"] || !data["requestId"])
+                    break;
+
+                  else {                  
+                      processScoring(data["result"], data["requestId"]);
+                      requestState().then(d => {
+                        storeTaskState(d["state"]);
+                      });
+                  }
+                  break;
+              
+                case "getTasksStateReturn":
+                  if(data["state"] && !!data["requestId"] && !!statePromiseResolve){
+                    statePromiseResolve(data);
+                  }
+                  break;
+
+                default:
+                  break;
+              }
+
+            } catch (error) {
+              console.error(error);
+            }
+
+            if(!!parent && parent !== window){
+                parent.postMessage(event.data, "*");
+            }
+
+        });
+
+        async function requestState(){
+            return new Promise((_resolve, _reject) => {
+              statePromiseResolve = _resolve;
+              document.querySelector("iframe").contentWindow.postMessage({ type: 'getTasksState', requestId: getLocationName(currentItem) });
+              window.setTimeout(() => {
+                _reject("timeout");
+              },500);
+            });
+        }
+          
+        function storeTaskState(data, suspend){
+            console.log(data);
+            if(!currentItem)
+              return;
+            tasksState = {state: data, location: getLocationName(currentItem)};
+            // localStorage.setItem("taskState", JSONC.pack({state: data, location: currentPage}));
+            // if(suspend)
+              // ScormProcessSetValue(`cmi.suspend_data`, JSONC.pack({state: data, location: ScormProcessGetValue("cmi.location")}));
+        }
+
+        function recordResults(hitMap, requestId){
+          // let location = ScormProcessGetValue("cmi.location");
+          // let location = requestId ?? ScormProcessGetValue("cmi.location");
+          let location = requestId;
+
+          hitMap.forEach((value, key) => {
+            let id = location+"."+key;
+            // let id = key;
+            let idx = responseIdx.indexOf(id);
+            if(idx<0){
+              responseIdx.push(id);
+              idx = responseIdx.indexOf(id);
+            }
+            response.set(id, value);
+            LMSProxy.IbReportAnswer({
+              id: key,
+              itemId: location,
+              response: value
+            })
+            // ScormProcessSetValue(`cmi.interactions.${idx}.id`, id);
+            // ScormProcessSetValue(`cmi.interactions.${idx}.type`, "other");
+            // ScormProcessSetValue(`cmi.interactions.${idx}.learner_response`, value);
+          });
+        }
+
+
+        function processScoring(results, requestId){
+
+            // let tmp = Object.keys(data["params"][1]["incidents"])[0];
+            // let identifier = tmp.substring(tmp.indexOf("/item")+1).replace("/",".").replace("task=","").replace("item=","");
+
+
+            /*  
+            *   for valid indentifier characters, check:
+            *   \vendor\qtism\qtism\qtism\common\utils\data\CharacterMap.php        
+            *   \vendor\qtism\qtism\qtism\runtime\pci\json\Unmarshaller.php
+            */
+
+            let classes = [];
+            let hits = [];
+            let _response = new Map();
+
+            for (let i of Object.keys(results)) {
+                if (i.indexOf("hit.") >= 0 && results[i] == true)
+                    hits.push(i.split(".")[1]);
+            }
+
+            for (let i of Object.keys(results)) {
+                if (i.indexOf("hitClass.") >= 0) {
+                    let hit = hits.indexOf(i.split(".")[1]);
+                    if (hit >= 0){
+                        let text = "";
+                        if(typeof results["hitText."+hits[hit]] == "string")
+                            text = results["hitText."+hits[hit]];
+                        classes.push({ "class": results[i], "hit": hits[hit], "text": text });
+
+                        _response.set(results[i], hits[hit]);
+                        if(text.length>0){
+                          _response.set(results[i] + ".hitText", text);
+                        }
+                    }
+                }
+            }
+
+            console.log(_response, classes, hits);
+            recordResults(_response, requestId ?? "");
+       }
+
+
+        function getLocationName(taskDefinition){
+            return `${taskDefinition.item}.${taskDefinition.task}`;
+        }
+
+
+  /***********************************************************************************************************/
+
+
+        window.partnerContent = [];
+
+        var quizId = null;
+        var storylineId = null;
+        var completionPercentage = 100;
+        var cache = null;
+
+        var LMSProxy = lms();
+
+        var assign = LMSProxy.utils.assign;
+        var debounce = LMSProxy.utils.debounce;
+
+
+        LMSProxy.InitCompletion(isComplete);
+
+        function compress(data) {
+          try {
+            return JSON.stringify({
+              v: 2,
+              d: lzwCompress.pack(JSON.stringify(data)),
+              cpv: "blNnTLpj",
+            });
+          } catch (e) {
+            return "";
+          }
+        }
+
+        function decompress(stringData) {
+          try {
+            const data = JSON.parse(stringData);
+
+            return data.d ? JSON.parse(lzwCompress.unpack(data.d)) : data;
+          } catch (e) {
+            return {};
+          }
+        }
+
+        function identity(value) {
+          return value;
+        }
+
+        var sendChunkData = debounce(function () {
+          LMSProxy.SetDataChunk(compress(cache));
+        }, 1000);
+
+        function isPassed() {
+          return !!getLMSData().passed;
+        }
+
+        function isComplete() {
+          var progress;
+
+          if (quizId === null) {
+            progress = getLMSData().totalProgress;
+            return progress !== undefined && progress >= completionPercentage;
+          }
+
+          return getLMSData().passed !== undefined;
+        }
+
+        function getLMSData() {
+          var data = null;
+
+          if (!cache) {
+            data = LMSProxy.GetDataChunk();
+
+            var result = data ? decompress(data) : {};
+
+            cache = result;
+          }
+
+          return cache;
+        }
+
+        function concatLMSData(data) {
+          assign(cache, data);
+          sendChunkData();
+        }
+
+        function completeOut(passed) {
+          if (passed) {
+            LMSProxy.SetPassed();
+          } else {
+            LMSProxy.SetFailed();
+          }
+        }
+
+        function bookmark(id) {
+          var url = "#/lessons/" + id;
+          
+          LMSProxy.SetBookmark(url, "");
+        }
+
+        function reportScore(score) {
+          var highScore = Math.max(getLMSData().score || 0, score);
+
+          if (highScore === score) {
+            concatLMSData({ score: highScore });
+            LMSProxy.SetScore(highScore, 100, 0);
+          }
+        }
+
+        function finish(totalProgress) {
+          // if (
+          //   quizId === null &&
+          //   storylineId === null &&
+          //   !isComplete() &&
+          //   completionPercentage !== undefined
+          // ) {
+            if (totalProgress >= completionPercentage) {
+              concatLMSData({ totalProgress: totalProgress });
+              completeOut(true);
+            }
+          // }
+        }
+
+        function finishQuiz(passed, score, id) {
+          if (id == quizId) {
+            var prevScore = getLMSData().score;
+            reportScore(score);
+
+            if (prevScore == null || prevScore < score) {
+              concatLMSData({ passed: passed });
+              completeOut(passed);
+            }
+          }
+        }
+
+        function finishStoryline(id, passed, isQuiz, score) {
+          if (id == storylineId) {
+            if (isQuiz) {
+              reportScore(score);
+            }
+
+            completeOut(passed);
+          }
+        }
+
+        function getProgress() {
+          // var decodeCourseProgress = root.Rise.decodeCourseProgress;
+
+          var progress = assign(
+            {},
+            {
+              progress: { lessons: {} },
+            },
+            getLMSData()
+          ).progress;
+
+          // if (initialProgress) {
+          //   return decodeCourseProgress(initialProgress, progress);
+          // }
+
+          return progress;
+        }
+
+        function isExport() {
+          return true;
+        }
+
+        function setLessonProgress(lessonProgress) {
+          // var encodeLessonProgress = root.Rise.encodeLessonProgress;
+
+          var currentProgress = getProgress();
+
+          var lessons = assign(
+            {},
+            currentProgress.lessons,
+            lessonProgress
+            // encodeLessonProgress(lessonProgress)
+          );
+
+          var progress = assign({}, currentProgress, { lessons: lessons });
+
+          concatLMSData({ progress: progress });
+        }
+
+        function setCourseProgress(courseProgress, lessonPayload) {
+          // var encodeCourseProgress = root.Rise.encodeCourseProgress;
+
+          var currentProgress = getProgress();
+          var lessonId = lessonPayload.id;
+
+          var progress = assign(
+            {},
+            currentProgress,
+            courseProgress
+            // encodeCourseProgress(courseProgress)
+          );
+
+          concatLMSData({ progress: progress });
+
+          LMSProxy.FinishLesson(courseProgress.percentComplete, lessonId);
+        }
+
+        function resolvePath(path) {
+          return "assets/".concat(path);
+        }
+
+        function resolveFontPath(font) {
+          return "lib/fonts/".concat(font.key.split("/").reverse()[0]);
+        }
+
+        function exit() {
+          LMSProxy.ConcedeControl();
+        }
+
+        function reportAnswer(data) {
+          return LMSProxy.ReportAnswer(data);
+        }
+
+        root.Rise = {
+          completeLessons: identity,
+          decodeCourseProgress: identity,
+          encodeCourseProgress: identity,
+          encodeLessonProgress: identity,
+        };
+
+        root.Runtime = {
+          bookmark: bookmark,
+          exit: exit,
+          finish: finish,
+          finishQuiz: finishQuiz,
+          finishStoryline: finishStoryline,
+          getProgress: getProgress,
+          isExport: isExport,
+          reportAnswer: reportAnswer,
+          resolvePath: resolvePath,
+          resolveFontPath: resolveFontPath,
+          setLessonProgress: setLessonProgress,
+          setCourseProgress: setCourseProgress,
+        };
+      })(window);
+    </script>
+
+    <div
+      class="itemwrapper"
+      style="overflow: hidden; width: 100%; height: 100vh"
+    >
+      <iframe
+        src=""
+        style="
+          border: none;
+          margin: 0px;
+          padding: 0px;
+          overflow: hidden;
+          height: 100%;
+          width: 100%;
+        "
+        id="cbaframe"
+      ></iframe>
+    </div>
+  </body>
+</html>
