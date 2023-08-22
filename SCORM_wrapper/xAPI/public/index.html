@@ -167,8 +167,8 @@
                         if(!!_state?.tasksState){
 
                             try {
-                                let state = _state?.tasksState;
-                                let location = _state?.location;
+                                let state = _state?.tasksState?.state;
+                                let location = _state?.tasksState?.location;
                                 let _request = { state };
                                 let _tmp = location.split(".");
                                 if(_tmp.length==2){
@@ -202,10 +202,15 @@
                     if(!data.data.item || !data.data.task)
                       break;
 
+                    if(!!currentItem){
+                      let progress = getTotalProgress();
+                      let data = { totalProgress: progress, location: getLocationName(currentItem) };
+                      if(!!tasksState)
+                          data["tasksState"] = tasksState;                     
+                      concatLMSData(data);
+                    }
+                    
                     currentItem = data.data;
-                    let progress = getTotalProgress();
-                    concatLMSData({ totalProgress: progress, location: getLocationName(currentItem) });
-                                        
                     bookmark(getLocationName(currentItem));
                 break;
                 
@@ -227,13 +232,13 @@
                         storeTaskState(d["state"]);
                       });
                   }
-                  break;
+                break;
               
                 case "getTasksStateReturn":
                   if(data["state"] && !!data["requestId"] && !!statePromiseResolve){
                     statePromiseResolve(data);
                   }
-                  break;
+                break;
 
                 default:
                   break;
