@@ -35,7 +35,7 @@ build_test(){
   		cp -r ./ee/SCORM_wrapper/h5p ./${FOLDER}
   		sed -i 's/"title":"h5p_title"/"title":"'"$FOLDER"'"/' ./${FOLDER}/h5p.json
 		sed -i 's@"source":"index.html"@"source":"https://'"$GITHUB_REPOSITORY_OWNER"'.github.io/'"$REPONAME"'/'"$FOLDER"'"@' ./$FOLDER/content/content.json
-		zip -r ${FOLDER}.zip ${FOLDER}/*
+		zip -r -j ${FOLDER}.zip ${FOLDER}/*
   		mv ${FOLDER}.zip ${FOLDER}.h5p  
 
 		export i=$((i+1))
