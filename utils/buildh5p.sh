@@ -25,14 +25,19 @@ build_test(){
 		(cd ./ee && npm run build)
 		cp -a ./ee/build/. ./public/${FOLDER}/
 		npx playwright screenshot --wait-for-timeout 2000 --viewport-size 1024,768 "http://127.0.0.1:8080/${REPONAME}/${FOLDER}" ./public/${FOLDER}.png
-		cp ${FOLDER}.png ./public/
 		
 		if [ $i -gt "0" ]; then
 			echo -n ',' >> data.json
 		fi		
 		echo -n '{"url": "https://'"${GITHUB_REPOSITORY_OWNER}"'.github.io/'"${REPONAME}"'/'"${FOLDER}"'","screenshot": "./'"${FOLDER}"'.png","title": "'"${FOLDER}"'"}' >> data.json
 
-		tar -cvf ${FOLDER}.tar *.zip
+		###### configure and package h5p
+  		cp -r ./ee/SCORM_wrapper/h5p ./${FOLDER}
+  		sed -i 's/"title":"h5p_title"/"title":"'"$FOLDER"'"/' ./${FOLDER}/h5p.json
+		sed -i 's@"source":"index.html"@"source":"https://'"$GITHUB_REPOSITORY_OWNER"'.github.io/'"$REPONAME"'/'"$FOLDER"'"@' ./$FOLDER/content/content.json
+		zip -r ${FOLDER}.zip ${FOLDER}/*
+  		mv ${FOLDER}.zip ${FOLDER}.h5p  
+
 		export i=$((i+1))
 		return 1
 }
