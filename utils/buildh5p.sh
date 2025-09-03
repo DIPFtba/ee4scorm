@@ -10,20 +10,20 @@ build_test(){
 		cd $IPATH && export FOLDER=${PWD##*/} && cd $GITHUB_WORKSPACE
 		echo $FOLDER
 		echo $IPATH
-		rm -r ./ee/ee/public/items/*
-		cp -a ${IPATH}. ./ee/ee/public/items/
-		# npm install --prefix ./ee/ee
+		rm -r ./ee/public/items/*
+		cp -a ${IPATH}. ./ee/public/items/
+		# npm install --prefix ./ee
 		# export REPONAME="${GITHUB_REPOSITORY#*/}"
-		sed -i 's@"homepage": ".*"@"homepage": "./"@' ./ee/ee/package.json
-		cd ./ee/ee && npm run build
-		find ./build/ -name *.map -exec rm {} \;
+		# sed -i 's@"homepage": ".*"@"homepage": "./"@' ./ee/package.json
+		# cd ./ee && npm run build
+		# find ./build/ -name *.map -exec rm {} \;
 		cd $GITHUB_WORKSPACE
 		
 
 		###### github pages
-		sed -i 's@"homepage": ".*"@"homepage": "/'"$REPONAME"'/'"$FOLDER"'/"@' ./ee/ee/package.json
-		(cd ./ee/ee && npm run build)
-		cp -a ./ee/ee/build/. ./public/${FOLDER}/
+		sed -i 's@"homepage": ".*"@"homepage": "/'"$REPONAME"'/'"$FOLDER"'/"@' ./ee/package.json
+		(cd ./ee && npm run build)
+		cp -a ./ee/build/. ./public/${FOLDER}/
 		npx playwright screenshot --wait-for-timeout 2000 --viewport-size 1024,768 "http://127.0.0.1:8080/${REPONAME}/${FOLDER}" ./public/${FOLDER}.png
 		cp ${FOLDER}.png ./public/
 		
